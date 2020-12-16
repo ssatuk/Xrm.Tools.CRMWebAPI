@@ -44,6 +44,7 @@ namespace Xrm.Tools.WebAPI
     {
         private HttpClient _httpClient = null;
         private CRMWebAPIConfig _crmWebAPIConfig;
+        private readonly IHttpClientFactory _httpClientFactory;
 
         // Create a policy registry
         private PolicyRegistry _registry;
@@ -52,15 +53,18 @@ namespace Xrm.Tools.WebAPI
         /// Instantiate the CRMWebAPI using the CRMWebAPIConfig, if NetworkCredentials are present it is assumed a on-premisse connection type.
         /// </summary>
         /// <param name="crmWebAPIConfig"> Api Config Object, it contais the  </param>
-        public CRMWebAPI(CRMWebAPIConfig crmWebAPIConfig)
+        /// <param name="httpClientFactory">Optional IHttpClientFactory, if not present CRMWebApi will new an HttpClient</param>
+        public CRMWebAPI(CRMWebAPIConfig crmWebAPIConfig, IHttpClientFactory httpClientFactory = null)
         {
             _crmWebAPIConfig = crmWebAPIConfig;
+            _httpClientFactory = httpClientFactory;
 
             if (_crmWebAPIConfig.NetworkCredential != null)
                 _httpClient = new HttpClient(new HttpClientHandler { Credentials = _crmWebAPIConfig.NetworkCredential });
             else
             {
-                _httpClient = new HttpClient();
+                // see https://docs.microsoft.com/en-us/aspnet/core/fundamentals/http-requests?view=aspnetcore-5.0#consumption-patterns
+                _httpClient = _httpClientFactory != null ? _httpClientFactory.CreateClient(nameof(CRMWebAPI)) :   new HttpClient();
                 _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _crmWebAPIConfig.AccessToken);
             }
 
@@ -75,8 +79,10 @@ namespace Xrm.Tools.WebAPI
         /// <param name="accessToken">allows for hard coded access token for testing</param>
         /// <param name="callerID">user id to impersonate on calls</param>
         /// <param name="getAccessToken">method to call to refresh access token, called before each use of token</param>
-        public CRMWebAPI(string apiUrl, string accessToken, Guid callerID = default(Guid), Func<string, Task<string>> getAccessToken = null, TimeSpan? timeout = null)
+        /// <param name="httpClientFactory"></param>
+        public CRMWebAPI(string apiUrl, string accessToken, Guid callerID = default(Guid), Func<string, Task<string>> getAccessToken = null, TimeSpan? timeout = null, IHttpClientFactory httpClientFactory = null)
         {
+            _httpClientFactory = httpClientFactory;
             _crmWebAPIConfig = new CRMWebAPIConfig
             {
                 APIUrl = apiUrl,
@@ -86,7 +92,8 @@ namespace Xrm.Tools.WebAPI
                 Timeout = timeout.GetValueOrDefault(TimeSpan.FromMinutes(2.0))
             };
 
-            _httpClient = new HttpClient();
+            // see https://docs.microsoft.com/en-us/aspnet/core/fundamentals/http-requests?view=aspnetcore-5.0#consumption-patterns
+            _httpClient = _httpClientFactory != null ? _httpClientFactory.CreateClient(nameof(CRMWebAPI)) : new HttpClient();
             _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _crmWebAPIConfig.AccessToken);
 
             SetHttpClientDefaults(callerID, timeout);
