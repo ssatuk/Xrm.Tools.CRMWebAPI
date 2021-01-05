@@ -40,7 +40,7 @@ using Xrm.Tools.WebAPI.Results;
 
 namespace Xrm.Tools.WebAPI
 {
-    public class CRMWebAPI
+    public partial class CRMWebAPI
     {
         private HttpClient _httpClient = null;
         private CRMWebAPIConfig _crmWebAPIConfig;
@@ -578,6 +578,77 @@ namespace Xrm.Tools.WebAPI
             }
 
             return changesetFixedContent;
+        }
+
+        /// <summary>
+        /// update multiple records at once using a batch
+        /// </summary>
+        /// <param name="entityCollection"></param>
+        /// <param name="datalist"></param>
+        /// <returns></returns>
+        public async Task<CRMBatchResult> Update(string entityCollection, CRMUpdateObject[] datalist)
+        {
+            await CheckAuthToken();
+
+            var httpClient = new HttpClient();
+
+            httpClient.DefaultRequestHeaders.Authorization =
+               new AuthenticationHeaderValue("Bearer", _crmWebAPIConfig.AccessToken);
+            httpClient.DefaultRequestHeaders.Add("OData-MaxVersion", "4.0");
+            httpClient.DefaultRequestHeaders.Add("OData-Version", "4.0");
+            var batchid = "batch_" + Guid.NewGuid().ToString();
+
+            MultipartContent batchContent = new MultipartContent("mixed", batchid);
+            var changesetID = "changeset_" + Guid.NewGuid().ToString();
+            MultipartContent changeSetContent = new MultipartContent("mixed", changesetID);
+
+            int contentID = 1;
+            foreach (var dataitem in datalist)
+            {
+                HttpRequestMessage req = new HttpRequestMessage(new HttpMethod("PATCH"), _crmWebAPIConfig.APIUrl + entityCollection + "(" + dataitem.EntityId + ")");
+
+                req.Content = new StringContent(JsonConvert.SerializeObject(dataitem.data), Encoding.UTF8, "application/json");
+                HttpMessageContent content = new HttpMessageContent(req);
+                content.Headers.Remove("Content-Type");
+                content.Headers.TryAddWithoutValidation("Content-Type", "application/http");
+                content.Headers.TryAddWithoutValidation("Content-Transfer-Encoding", "binary");
+                content.Headers.TryAddWithoutValidation("Content-ID", contentID.ToString());
+                contentID++;
+                changeSetContent.Add(content);
+            }
+
+            batchContent.Add(changeSetContent);
+
+            HttpRequestMessage batchRequest = new HttpRequestMessage(HttpMethod.Post, _crmWebAPIConfig.APIUrl + "$batch");
+
+            batchRequest.Content = batchContent;
+
+            var batchstring = await batchRequest.Content.ReadAsStringAsync();
+
+            var response = await httpClient.SendAsync(batchRequest);
+            var responseString = response.Content.ReadAsStringAsync();
+            MultipartMemoryStreamProvider batchStream = await response.Content.ReadAsMultipartAsync(); ;
+            var changesetStream = batchStream.Contents.FirstOrDefault();
+
+            StreamContent changesetFixedContent = FixupChangeStreamDueToBug(changesetStream);
+
+            var changesetFixedStream = await changesetFixedContent.ReadAsMultipartAsync();
+            CRMBatchResult finalResult = new CRMBatchResult();
+            finalResult.ResultItems = new List<CRMBatchResultItem>();
+
+            foreach (var responseContent in changesetFixedStream.Contents)
+            {
+                var fixedREsponseContent = FixupToAddCorrectHttpContentType(responseContent);
+                var individualResponseString = await fixedREsponseContent.ReadAsStringAsync();
+                var indivdualResponse = await fixedREsponseContent.ReadAsHttpResponseMessageAsync();
+                var idString = indivdualResponse.Headers.GetValues("OData-EntityId").FirstOrDefault();
+                idString = idString.Replace(_crmWebAPIConfig.APIUrl + entityCollection, "").Replace("(", "").Replace(")", "");
+                CRMBatchResultItem resultItem = new CRMBatchResultItem();
+                resultItem.EntityID = Guid.Parse(idString);
+                finalResult.ResultItems.Add(resultItem);
+            }
+
+            return finalResult;
         }
 
         /// <summary>
