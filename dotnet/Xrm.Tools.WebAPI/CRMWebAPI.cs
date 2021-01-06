@@ -1009,6 +1009,10 @@ namespace Xrm.Tools.WebAPI
                     {
                         valueList.Add(string.Format("@p{0}={1}", paramCount, parm.Value));
                     }
+                    else if (parm.Value is Guid)
+                    {
+                        valueList.Add(string.Format("@p{0}={1}", paramCount, parm.Value));
+                    }
                     else
                     {
                         valueList.Add(string.Format("@p{0}={1}", paramCount, JsonConvert.SerializeObject(parm.Value)));
