@@ -50,6 +50,22 @@ namespace Xrm.Tools.WebAPI
         private PolicyRegistry _registry;
 
         /// <summary>
+        /// Construct with injected HttpClient, allowing client configuration in calling app DI
+        /// </summary>
+        /// <seealso cref="https://docs.microsoft.com/en-us/aspnet/core/fundamentals/http-requests?view=aspnetcore-5.0#consumption-patterns"/>
+        /// <param name="crmWebAPIConfig"></param>
+        /// <param name="httpClient"></param>
+        public CRMWebAPI(CRMWebAPIConfig crmWebAPIConfig, HttpClient httpClient)
+        {
+            _crmWebAPIConfig = crmWebAPIConfig;
+            _httpClient = httpClient;
+            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _crmWebAPIConfig.AccessToken);
+            SetHttpClientDefaults(_crmWebAPIConfig.CallerID, _crmWebAPIConfig.Timeout);
+            InitializePollyRegistry();
+
+        }
+
+        /// <summary>
         /// Instantiate the CRMWebAPI using the CRMWebAPIConfig, if NetworkCredentials are present it is assumed a on-premisse connection type.
         /// </summary>
         /// <param name="crmWebAPIConfig"> Api Config Object, it contais the  </param>
