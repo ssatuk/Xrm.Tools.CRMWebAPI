@@ -34,6 +34,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Xml;
+using Polly.Wrap;
 using Xrm.Tools.WebAPI.Requests;
 using Xrm.Tools.WebAPI.Results;
 
@@ -42,27 +43,31 @@ namespace Xrm.Tools.WebAPI
 {
     public partial class CRMWebAPI
     {
+        public static string PolicyNameNoOp = "NoOpPolicy";
+        public static string PolicyNameWaitAndRetry = "WaitAndRetryPolicy";
+        public static string PolicyNameStandardResilience = "StandardResilience";
+
         private HttpClient _httpClient = null;
         private CRMWebAPIConfig _crmWebAPIConfig;
         private readonly IHttpClientFactory _httpClientFactory;
 
         // Create a policy registry
-        private PolicyRegistry _registry;
+        private IPolicyRegistry<string> _registry;
+        private bool _injectedClient = false;
 
         /// <summary>
-        /// Construct with injected HttpClient, allowing client configuration in calling app DI
+        /// Construct with injected HttpClient, allowing client configuration in calling app DI. If Polly required MUST be configured on injected client.
         /// </summary>
         /// <seealso cref="https://docs.microsoft.com/en-us/aspnet/core/fundamentals/http-requests?view=aspnetcore-5.0#consumption-patterns"/>
         /// <param name="crmWebAPIConfig"></param>
-        /// <param name="httpClient"></param>
+        /// <param name="httpClient">Injected HttpClient</param>
         public CRMWebAPI(CRMWebAPIConfig crmWebAPIConfig, HttpClient httpClient)
         {
+            _injectedClient = true;
             _crmWebAPIConfig = crmWebAPIConfig;
             _httpClient = httpClient;
             _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _crmWebAPIConfig.AccessToken);
             SetHttpClientDefaults(_crmWebAPIConfig.CallerID, _crmWebAPIConfig.Timeout);
-            InitializePollyRegistry();
-
         }
 
         /// <summary>
@@ -174,11 +179,15 @@ namespace Xrm.Tools.WebAPI
             // Create a noOp policy, so that can be used for idempotent requests
             IAsyncPolicy<HttpResponseMessage> noOpPolicy = Policy.NoOpAsync().AsAsyncPolicy<HttpResponseMessage>();
 
+            // Create a policyWrap that can combine policies
+            var policyWrap = Policy.WrapAsync<HttpResponseMessage>(noOpPolicy, waitAndRetryPolicy);   
+
             // Create policy registry and add the policies to it
             _registry = new PolicyRegistry()
                             {
-                                { "WaitAndRetryPolicy", waitAndRetryPolicy },
-                                { "NoOpPolicy", noOpPolicy },
+                                { CRMWebAPI.PolicyNameWaitAndRetry, waitAndRetryPolicy },
+                                { CRMWebAPI.PolicyNameNoOp, noOpPolicy },
+                                { CRMWebAPI.PolicyNameStandardResilience, policyWrap }
                             };
         }
 
@@ -195,10 +204,19 @@ namespace Xrm.Tools.WebAPI
             string fullUrl = BuildGetUrl(uri, QueryOptions);
             HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, fullUrl);
             FillPreferHeader(request, QueryOptions);
+            HttpResponseMessage results;
+            if (_injectedClient)
+            {
+                // we assume that injected client will have any Polly 
+                // config required by calling application
+                results = await _httpClient.SendAsync(request);
+            }
+            else
+            {
 
-            //var results = await _httpClient.SendAsync(request);
-            var results = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>("WaitAndRetryPolicy")
-                                            .ExecuteAsync(() => _httpClient.SendAsync(request));
+                results = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>(PolicyNameStandardResilience)
+                    .ExecuteAsync(() => _httpClient.SendAsync(request));
+            }
 
             EnsureSuccessStatusCode(results);
             var data = await results.Content.ReadAsStringAsync();
@@ -226,9 +244,20 @@ namespace Xrm.Tools.WebAPI
                 HttpRequestMessage nextrequest = new HttpRequestMessage(HttpMethod.Get, nextLink.ToString());
                 FillPreferHeader(nextrequest, QueryOptions);
 
-                //var nextResults = await _httpClient.SendAsync(nextrequest);
-                var nextResults = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>("WaitAndRetryPolicy")
-                                            .ExecuteAsync(() => _httpClient.SendAsync(nextrequest));
+                HttpResponseMessage nextResults;
+                if (_injectedClient)
+                {
+                    // we assume that injected client will have any Polly 
+                    // config required by calling application
+
+                    nextResults = await _httpClient.SendAsync(nextrequest);
+                }
+                else
+                {
+
+                    nextResults = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>(PolicyNameStandardResilience)
+                        .ExecuteAsync(() => _httpClient.SendAsync(nextrequest));
+                }
 
                 EnsureSuccessStatusCode(nextResults);
                 var nextData = await nextResults.Content.ReadAsStringAsync();
@@ -290,9 +319,19 @@ namespace Xrm.Tools.WebAPI
             HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, fullUrl);
             FillPreferHeader(request, QueryOptions);
 
-            //var results = await _httpClient.SendAsync(request);
-            var results = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>("WaitAndRetryPolicy")
-                                            .ExecuteAsync(() => _httpClient.SendAsync(request));
+            HttpResponseMessage results;
+            if (_injectedClient)
+            {
+                // we assume that injected client will have any Polly 
+                // config required by calling application
+                results = await _httpClient.SendAsync(request);
+            }
+            else
+            {
+
+                results = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>(PolicyNameStandardResilience)
+                    .ExecuteAsync(() => _httpClient.SendAsync(request));
+            }
 
             EnsureSuccessStatusCode(results);
             var data = await results.Content.ReadAsStringAsync();
@@ -318,10 +357,20 @@ namespace Xrm.Tools.WebAPI
 
             while (nextLink != null)
             {
-                //var nextResults = await _httpClient.GetAsync(nextLink.ToString());
-                var nextResults = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>("WaitAndRetryPolicy")
-                                            .ExecuteAsync(() => _httpClient.GetAsync(nextLink.ToString()));
+                HttpResponseMessage nextResults;
+                if (_injectedClient)
+                {
+                    // we assume that injected client will have any Polly 
+                    // config required by calling application
 
+                    nextResults = await _httpClient.GetAsync(nextLink.ToString());
+                }
+                else 
+                {
+                    nextResults = await _registry
+                        .Get<IAsyncPolicy<HttpResponseMessage>>(PolicyNameStandardResilience)
+                        .ExecuteAsync(() => _httpClient.GetAsync(nextLink.ToString()));
+                }
                 EnsureSuccessStatusCode(nextResults);
                 var nextData = await nextResults.Content.ReadAsStringAsync();
 
@@ -378,9 +427,18 @@ namespace Xrm.Tools.WebAPI
                 QueryOptions.IncludeCount = false;
             string fullUrl = BuildGetUrl(uri + "/$count", QueryOptions);
 
-            //var results = await _httpClient.GetAsync(fullUrl);
-            var results = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>("WaitAndRetryPolicy")
-                                            .ExecuteAsync(() => _httpClient.GetAsync(fullUrl));
+            HttpResponseMessage results;
+            if (_injectedClient)
+            {
+                // we assume that injected client will have any Polly 
+                // config required by calling application
+                results = await _httpClient.GetAsync(fullUrl);
+            }
+            else
+            {
+                results = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>(PolicyNameStandardResilience)
+                    .ExecuteAsync(() => _httpClient.GetAsync(fullUrl));
+            }
 
             EnsureSuccessStatusCode(results);
             var data = await results.Content.ReadAsStringAsync();
@@ -444,9 +502,18 @@ namespace Xrm.Tools.WebAPI
                 }
             }
 
-            //var results = await _httpClient.SendAsync(request);
-            var results = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>("WaitAndRetryPolicy")
-                                            .ExecuteAsync(() => _httpClient.SendAsync(request));
+            HttpResponseMessage results;
+            if (_injectedClient)
+            {
+                // we assume that injected client will have any Polly 
+                // config required by calling application
+                results = await _httpClient.SendAsync(request);
+            }
+            else
+            { 
+                results = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>(PolicyNameStandardResilience)
+                    .ExecuteAsync(() => _httpClient.SendAsync(request));
+            }
 
             EnsureSuccessStatusCode(results);
             var data = await results.Content.ReadAsStringAsync();
@@ -475,6 +542,8 @@ namespace Xrm.Tools.WebAPI
 
             request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
 
+            // not idempotent so by default no policies applied by default
+            // calling app can provide via configured httpclient 
             var response = await _httpClient.SendAsync(request);
 
             EnsureSuccessStatusCode(response, jsonData: jsonData);
@@ -529,7 +598,10 @@ namespace Xrm.Tools.WebAPI
 
             var batchstring = await batchRequest.Content.ReadAsStringAsync();
 
+            // not idempotent so by default no policies applied by default
+            // calling app can provide via configured httpclient 
             var response = await httpClient.SendAsync(batchRequest);
+
             var responseString = response.Content.ReadAsStringAsync();
             MultipartMemoryStreamProvider batchStream = await response.Content.ReadAsMultipartAsync(); ;
             var changesetStream = batchStream.Contents.FirstOrDefault();
@@ -641,7 +713,11 @@ namespace Xrm.Tools.WebAPI
 
             var batchstring = await batchRequest.Content.ReadAsStringAsync();
 
+            // not idempotent so by default no policies applied by default
+            // calling app can provide via configured httpclient 
             var response = await httpClient.SendAsync(batchRequest);
+        
+
             var responseString = response.Content.ReadAsStringAsync();
             MultipartMemoryStreamProvider batchStream = await response.Content.ReadAsMultipartAsync(); ;
             var changesetStream = batchStream.Contents.FirstOrDefault();
@@ -705,6 +781,8 @@ namespace Xrm.Tools.WebAPI
             if (!Upsert)
                 request.Headers.Add("If-Match", "*");
 
+            // not idempotent so by default no policies applied by default
+            // calling app can provide via configured httpclient 
             var response = await _httpClient.SendAsync(request);
 
             result.EntityID = GetEntityIDFromResponse(response);
@@ -734,8 +812,11 @@ namespace Xrm.Tools.WebAPI
         {
             await CheckAuthToken();
 
+            // by default we won't apply policy here  as unlikely to be idempotent
+            // if calling app needs e.g. circuit breaker it can provide 
+            // by injecting a configured HttpClient
             var response = await _httpClient.DeleteAsync(_crmWebAPIConfig.APIUrl + entityCollection + "(" + entityID.ToString() + ")");
-
+            
             EnsureSuccessStatusCode(response);
 
         }
@@ -751,7 +832,19 @@ namespace Xrm.Tools.WebAPI
             await CheckAuthToken();
             var fullUrl = string.Empty;
             fullUrl = BuildFunctionActionURI(function, parameters);
-            var results = await _httpClient.GetAsync(fullUrl);
+            HttpResponseMessage results;
+            if (_injectedClient)
+            {
+                // we assume that injected client will have any Polly 
+                // config required by calling application
+                results = await _httpClient.GetAsync(fullUrl);
+            }
+            else
+            {
+                results = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>(PolicyNameStandardResilience)
+                    .ExecuteAsync(() => _httpClient.GetAsync(fullUrl));
+            }
+
             EnsureSuccessStatusCode(results);
             var data = await results.Content.ReadAsStringAsync();
             var values = JsonConvert.DeserializeObject<ExpandoObject>(data);
@@ -804,8 +897,12 @@ namespace Xrm.Tools.WebAPI
 
             request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
 
+            // as actions have side effects unlikely to be idempotent
+            // therefore we do not default any policies
+            // if calling app needs e.g. a circuit breaker
+            // it can provide a configured HttpClient
             var results = await _httpClient.SendAsync(request);
-
+            
             EnsureSuccessStatusCode(results, jsonData: jsonData);
 
             var resultData = await results.Content.ReadAsStringAsync();
@@ -847,8 +944,10 @@ namespace Xrm.Tools.WebAPI
 
             request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
 
+            // not idempotent so by default no policies
+            // calling app can provide via configured httpclient 
             var response = await _httpClient.SendAsync(request);
-
+            
             EnsureSuccessStatusCode(response, jsonData: jsonData);
 
             return true;
@@ -872,9 +971,10 @@ namespace Xrm.Tools.WebAPI
             if (!string.IsNullOrEmpty(toEntityCollection) && toEntityID != Guid.Empty)
                 url += $"?$id={_crmWebAPIConfig.APIUrl}{toEntityCollection}({toEntityID})";
 
-
+            // not idempotent so be default no policies
+            // calling app can provide via configured httpclient 
             var response = await _httpClient.DeleteAsync(url);
-
+            
             EnsureSuccessStatusCode(response);
 
         }
