@@ -484,8 +484,10 @@ namespace Xrm.Tools.WebAPI
 
             request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
 
-            var response = await _httpClient.SendAsync(request);
-
+            //var response = await _httpClient.SendAsync(request);
+            var response = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>(PolicyNameStandardResilience)
+                .ExecuteAsync(() => _httpClient.SendAsync(request));
+            
             EnsureSuccessStatusCode(response, jsonData: jsonData);
 
             Guid idGuid = GetEntityIDFromResponse(response);
@@ -538,7 +540,9 @@ namespace Xrm.Tools.WebAPI
 
             var batchstring = await batchRequest.Content.ReadAsStringAsync();
 
-            var response = await httpClient.SendAsync(batchRequest);
+            //var response = await httpClient.SendAsync(batchRequest);
+            var response = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>(PolicyNameStandardResilience)
+                .ExecuteAsync(() => _httpClient.SendAsync(batchRequest));
             var responseString = response.Content.ReadAsStringAsync();
             MultipartMemoryStreamProvider batchStream = await response.Content.ReadAsMultipartAsync(); ;
             var changesetStream = batchStream.Contents.FirstOrDefault();
@@ -650,7 +654,10 @@ namespace Xrm.Tools.WebAPI
 
             var batchstring = await batchRequest.Content.ReadAsStringAsync();
 
-            var response = await httpClient.SendAsync(batchRequest);
+            //var response = await httpClient.SendAsync(batchRequest);
+            var response = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>(PolicyNameStandardResilience)
+                .ExecuteAsync(() => _httpClient.SendAsync(batchRequest));
+
             var responseString = response.Content.ReadAsStringAsync();
             MultipartMemoryStreamProvider batchStream = await response.Content.ReadAsMultipartAsync(); ;
             var changesetStream = batchStream.Contents.FirstOrDefault();
@@ -714,7 +721,9 @@ namespace Xrm.Tools.WebAPI
             if (!Upsert)
                 request.Headers.Add("If-Match", "*");
 
-            var response = await _httpClient.SendAsync(request);
+            //var response = await _httpClient.SendAsync(request);
+            var response = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>(PolicyNameStandardResilience)
+                .ExecuteAsync(() => _httpClient.SendAsync(request));
 
             result.EntityID = GetEntityIDFromResponse(response);
 
@@ -743,8 +752,10 @@ namespace Xrm.Tools.WebAPI
         {
             await CheckAuthToken();
 
-            var response = await _httpClient.DeleteAsync(_crmWebAPIConfig.APIUrl + entityCollection + "(" + entityID.ToString() + ")");
-
+            //var response = await _httpClient.DeleteAsync(_crmWebAPIConfig.APIUrl + entityCollection + "(" + entityID.ToString() + ")");
+            var response = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>(PolicyNameStandardResilience)
+                .ExecuteAsync(() => _httpClient.DeleteAsync(_crmWebAPIConfig.APIUrl + entityCollection + "(" + entityID.ToString() + ")"));
+            
             EnsureSuccessStatusCode(response);
 
         }
@@ -760,7 +771,9 @@ namespace Xrm.Tools.WebAPI
             await CheckAuthToken();
             var fullUrl = string.Empty;
             fullUrl = BuildFunctionActionURI(function, parameters);
-            var results = await _httpClient.GetAsync(fullUrl);
+            //var results = await _httpClient.GetAsync(fullUrl);
+            var results = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>(PolicyNameStandardResilience)
+                .ExecuteAsync(() => _httpClient.GetAsync(fullUrl));
             EnsureSuccessStatusCode(results);
             var data = await results.Content.ReadAsStringAsync();
             var values = JsonConvert.DeserializeObject<ExpandoObject>(data);
@@ -813,7 +826,9 @@ namespace Xrm.Tools.WebAPI
 
             request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
 
-            var results = await _httpClient.SendAsync(request);
+            //var results = await _httpClient.SendAsync(request);
+            var results = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>(PolicyNameStandardResilience)
+                .ExecuteAsync(() => _httpClient.SendAsync(request));
 
             EnsureSuccessStatusCode(results, jsonData: jsonData);
 
@@ -856,8 +871,10 @@ namespace Xrm.Tools.WebAPI
 
             request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
 
-            var response = await _httpClient.SendAsync(request);
-
+            //var response = await _httpClient.SendAsync(request);
+            var response = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>(PolicyNameStandardResilience)
+                .ExecuteAsync(() => _httpClient.SendAsync(request));
+            
             EnsureSuccessStatusCode(response, jsonData: jsonData);
 
             return true;
@@ -882,7 +899,10 @@ namespace Xrm.Tools.WebAPI
                 url += $"?$id={_crmWebAPIConfig.APIUrl}{toEntityCollection}({toEntityID})";
 
 
-            var response = await _httpClient.DeleteAsync(url);
+            //var response = await _httpClient.DeleteAsync(url);
+
+            var response = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>(PolicyNameStandardResilience)
+                .ExecuteAsync(() => _httpClient.DeleteAsync(url));
 
             EnsureSuccessStatusCode(response);
 
