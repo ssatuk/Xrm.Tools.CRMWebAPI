@@ -34,6 +34,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Xml;
+using Polly.Wrap;
 using Xrm.Tools.WebAPI.Requests;
 using Xrm.Tools.WebAPI.Results;
 
@@ -42,6 +43,10 @@ namespace Xrm.Tools.WebAPI
 {
     public partial class CRMWebAPI
     {
+        public static string PolicyNameNoOp = "NoOpPolicy";
+        public static string PolicyNameWaitAndRetry = "WaitAndRetryPolicy";
+        public static string PolicyNameStandardResilience = "StandardResilience";
+
         private HttpClient _httpClient = null;
         private CRMWebAPIConfig _crmWebAPIConfig;
         private readonly IHttpClientFactory _httpClientFactory;
@@ -174,11 +179,15 @@ namespace Xrm.Tools.WebAPI
             // Create a noOp policy, so that can be used for idempotent requests
             IAsyncPolicy<HttpResponseMessage> noOpPolicy = Policy.NoOpAsync().AsAsyncPolicy<HttpResponseMessage>();
 
+            // Create a policyWrap that can combine policies
+            var policyWrap = Policy.WrapAsync<HttpResponseMessage>(noOpPolicy, waitAndRetryPolicy);   
+
             // Create policy registry and add the policies to it
             _registry = new PolicyRegistry()
                             {
-                                { "WaitAndRetryPolicy", waitAndRetryPolicy },
-                                { "NoOpPolicy", noOpPolicy },
+                                { CRMWebAPI.PolicyNameWaitAndRetry, waitAndRetryPolicy },
+                                { CRMWebAPI.PolicyNameNoOp, noOpPolicy },
+                                { CRMWebAPI.PolicyNameStandardResilience, policyWrap }
                             };
         }
 
