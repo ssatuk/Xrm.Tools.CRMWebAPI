@@ -52,21 +52,29 @@ namespace Xrm.Tools.WebAPI
         private readonly IHttpClientFactory _httpClientFactory;
 
         // Create a policy registry
-        private PolicyRegistry _registry;
+        private IPolicyRegistry<string> _registry;
 
         /// <summary>
         /// Construct with injected HttpClient, allowing client configuration in calling app DI
         /// </summary>
         /// <seealso cref="https://docs.microsoft.com/en-us/aspnet/core/fundamentals/http-requests?view=aspnetcore-5.0#consumption-patterns"/>
         /// <param name="crmWebAPIConfig"></param>
-        /// <param name="httpClient"></param>
-        public CRMWebAPI(CRMWebAPIConfig crmWebAPIConfig, HttpClient httpClient)
+        /// <param name="httpClient">Injected HttpClient</param>
+        /// <param name="registry">Optional injected Polly registry</param>
+        public CRMWebAPI(CRMWebAPIConfig crmWebAPIConfig, HttpClient httpClient, IPolicyRegistry<string> registry = null)
         {
             _crmWebAPIConfig = crmWebAPIConfig;
             _httpClient = httpClient;
             _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _crmWebAPIConfig.AccessToken);
             SetHttpClientDefaults(_crmWebAPIConfig.CallerID, _crmWebAPIConfig.Timeout);
-            InitializePollyRegistry();
+            if (registry != null)
+            {
+                _registry = registry;
+            }
+            else
+            {
+                InitializePollyRegistry();
+            }
 
         }
 
