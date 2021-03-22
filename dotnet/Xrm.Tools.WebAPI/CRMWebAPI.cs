@@ -206,7 +206,7 @@ namespace Xrm.Tools.WebAPI
             FillPreferHeader(request, QueryOptions);
 
             //var results = await _httpClient.SendAsync(request);
-            var results = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>("WaitAndRetryPolicy")
+            var results = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>(PolicyNameStandardResilience)
                                             .ExecuteAsync(() => _httpClient.SendAsync(request));
 
             EnsureSuccessStatusCode(results);
@@ -236,7 +236,7 @@ namespace Xrm.Tools.WebAPI
                 FillPreferHeader(nextrequest, QueryOptions);
 
                 //var nextResults = await _httpClient.SendAsync(nextrequest);
-                var nextResults = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>("WaitAndRetryPolicy")
+                var nextResults = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>(PolicyNameStandardResilience)
                                             .ExecuteAsync(() => _httpClient.SendAsync(nextrequest));
 
                 EnsureSuccessStatusCode(nextResults);
@@ -300,7 +300,7 @@ namespace Xrm.Tools.WebAPI
             FillPreferHeader(request, QueryOptions);
 
             //var results = await _httpClient.SendAsync(request);
-            var results = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>("WaitAndRetryPolicy")
+            var results = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>(PolicyNameStandardResilience)
                                             .ExecuteAsync(() => _httpClient.SendAsync(request));
 
             EnsureSuccessStatusCode(results);
@@ -328,7 +328,7 @@ namespace Xrm.Tools.WebAPI
             while (nextLink != null)
             {
                 //var nextResults = await _httpClient.GetAsync(nextLink.ToString());
-                var nextResults = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>("WaitAndRetryPolicy")
+                var nextResults = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>(PolicyNameStandardResilience)
                                             .ExecuteAsync(() => _httpClient.GetAsync(nextLink.ToString()));
 
                 EnsureSuccessStatusCode(nextResults);
@@ -388,7 +388,7 @@ namespace Xrm.Tools.WebAPI
             string fullUrl = BuildGetUrl(uri + "/$count", QueryOptions);
 
             //var results = await _httpClient.GetAsync(fullUrl);
-            var results = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>("WaitAndRetryPolicy")
+            var results = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>(PolicyNameStandardResilience)
                                             .ExecuteAsync(() => _httpClient.GetAsync(fullUrl));
 
             EnsureSuccessStatusCode(results);
@@ -454,7 +454,7 @@ namespace Xrm.Tools.WebAPI
             }
 
             //var results = await _httpClient.SendAsync(request);
-            var results = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>("WaitAndRetryPolicy")
+            var results = await _registry.Get<IAsyncPolicy<HttpResponseMessage>>(PolicyNameStandardResilience)
                                             .ExecuteAsync(() => _httpClient.SendAsync(request));
 
             EnsureSuccessStatusCode(results);
