@@ -852,6 +852,27 @@ namespace Xrm.Tools.WebAPI
         }
 
         /// <summary>
+        /// delete single property value on record
+        /// </summary>
+        /// <param name="entityCollection"></param>
+        /// <param name="entityID"></param>
+        /// <param name="propertyName"></param>
+        /// <returns></returns>
+        /// <remarks>See https://docs.microsoft.com/en-us/powerapps/developer/data-platform/webapi/update-delete-entities-using-web-api#delete-a-single-property-value  </remarks>
+        public async Task DeletePropertyValue(string entityCollection, Guid entityID, string propertyName)
+        {
+            await CheckAuthToken();
+
+            // by default we won't apply policy here  as unlikely to be idempotent
+            // if calling app needs e.g. circuit breaker it can provide 
+            // by injecting a configured HttpClient
+            var response = await _httpClient.DeleteAsync(_crmWebAPIConfig.APIUrl + entityCollection + "(" + entityID.ToString() + ")/" + propertyName);
+
+            EnsureSuccessStatusCode(response);
+
+        }
+
+        /// <summary>
         /// Execute a bound function using object parameters
         /// </summary>
         /// <param name="function"></param>
